@@ -17,6 +17,7 @@ M.setup = function(opts)
 
   -- setup auto_cmds
   if config.opts.auto_cmds then
+    local group = vim.api.nvim_create_augroup("Corn", { clear = true })
     vim.api.nvim_create_autocmd({
       "DiagnosticChanged",
       "CursorMoved",
@@ -26,11 +27,11 @@ M.setup = function(opts)
       "WinResized",
       "ModeChanged",
     }, {
-        group = vim.api.nvim_create_augroup("corn", {}),
-        callback = function()
-          M.render()
-        end
-      })
+      group = group,
+      callback = function()
+        M.render()
+      end
+    })
   end
 
   -- FIXME execute all the following after setup
@@ -69,36 +70,30 @@ M.setup = function(opts)
 
     if sub_cmd == "toggle" then
       M.toggle(opts.fargs[2])
-
     elseif sub_cmd == "scope" then
       M.scope(opts.fargs[2])
-
     elseif sub_cmd == "scope_cycle" then
       M.scope_cycle()
-
     elseif sub_cmd == "render" then
       M.render()
-
     else
       logger.error("invalid corn subcommand")
     end
-
   end, {
-      nargs = '+',
-      complete = function(ArgLead, CmdLine, CursorPos)
-        local args = vim.split(CmdLine, ' ', { trimempty = true })
-        last_arg = args[#args]
+    nargs = '+',
+    complete = function(ArgLead, CmdLine, CursorPos)
+      local args = vim.split(CmdLine, ' ', { trimempty = true })
+      last_arg = args[#args]
 
-        -- log(last_arg)
-        if last_arg == "Corn" then
-          return { 'toggle', 'scope', 'scope_cycle', 'render' }
-        elseif last_arg == "toggle" then
-          return { "on", "off" }
-        elseif last_arg == "scope" then
-          return { "line", "file" }
-        end
-
-      end,
+      -- log(last_arg)
+      if last_arg == "Corn" then
+        return { 'toggle', 'scope', 'scope_cycle', 'render' }
+      elseif last_arg == "toggle" then
+        return { "on", "off" }
+      elseif last_arg == "scope" then
+        return { "line", "file" }
+      end
+    end,
   })
 
   -- NOTE: deprecated
