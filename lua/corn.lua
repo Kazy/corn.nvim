@@ -61,12 +61,12 @@ M.setup = function(opts)
     M.render()
   end
 
+  M.debounced_render, _ = require('corn.debounce').throttle_trailing(function()
+    renderer.render(utils.get_diagnostic_items())
+  end, 200, true)
+
   function M.render()
-    local fn, timer = require('corn.debounce').debounce_trailing(function()
-      renderer.render(utils.get_diagnostic_items())
-    end, 200)
-    fn()
-    timer:close()
+    M.debounced_render()
   end
 
   vim.api.nvim_create_user_command("Corn", function(opts)
