@@ -21,20 +21,21 @@ M.setup = function(opts)
   -- setup auto_cmds
   if config.opts.auto_cmds then
     local group = vim.api.nvim_create_augroup("Corn", { clear = true })
-    vim.api.nvim_create_autocmd({
-      "DiagnosticChanged",
-      "CursorMoved",
-      "CursorMovedI",
-      "TextChanged",
-      "TextChangedI",
-      "WinResized",
-      "ModeChanged",
-    }, {
-      group = group,
-      callback = function()
-        M.render()
-      end
-    })
+    vim.api.nvim_create_autocmd(
+      config.opts.render_events, {
+        group = group,
+        callback = function()
+          M.render()
+        end
+      })
+    vim.api.nvim_create_autocmd(
+      config.opts.update_events, {
+        group = group,
+        callback = function()
+          M.update_cache()
+        end
+      }
+    )
   end
 
   -- FIXME execute all the following after setup
@@ -64,12 +65,12 @@ M.setup = function(opts)
     M.render()
   end
 
-  M.debounced_render, _ = require('corn.debounce').throttle_trailing(function()
-    renderer.render(utils.get_diagnostic_items())
-  end, 200, true)
+  function M.update_cache()
+    renderer.update_cache()
+  end
 
   function M.render()
-    M.debounced_render()
+    renderer.render_from_cache()
   end
 
   vim.api.nvim_create_user_command("Corn", function(opts)

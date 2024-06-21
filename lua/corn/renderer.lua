@@ -6,17 +6,18 @@ local M = {}
 M.bufnr = nil
 M.ns = nil
 M.win = nil
-M.should_render = false -- used to determine if the window can be displayed
-M.state = true          -- user controlled hiding toggle
+M.state = true -- user controlled hiding toggle
+
+M.cache = {}
+
+M.update_cache = function()
+  M.cache = utils.update_cached_diagnostic()
+end
 
 M.make_win_cfg = function(width, height, position, xoff, yoff)
   local cfg = {
     relative = "editor",
-    -- win = vim.api.nvim_get_current_win(),
 
-    -- anchor = "NE",
-    -- col = vim.api.nvim_win_get_width(0) - 1, -- because of the scrollbar
-    -- row = 0,
 
     width = width <= 0 and 1 or width,
     height = height <= 0 and 1 or height,
@@ -24,18 +25,14 @@ M.make_win_cfg = function(width, height, position, xoff, yoff)
     style = 'minimal',
 
     border = config.opts.border_style,
-    -- border = 'none',
   }
 
 
   cfg.anchor = "NE"
-  -- cfg.fixed = true
 
-  local rline, rcol = utils.get_cursor_relative_pos()
+  local rline, _ = utils.get_cursor_relative_pos()
   local ui_config = vim.api.nvim_list_uis()[1]
-  local win_y, win_x = unpack(vim.api.nvim_win_get_position(0));
-  local win_height = vim.api.nvim_win_get_height(0);
-  local win_width = vim.api.nvim_win_get_width(0);
+  local win_y, _ = unpack(vim.api.nvim_win_get_position(0));
 
   if (win_y + rline) <= height then
     cfg.col = ui_config.width
@@ -45,18 +42,12 @@ M.make_win_cfg = function(width, height, position, xoff, yoff)
     cfg.row = 0
   end
 
-
-  -- if rcol > ui_config.width
-  --
-  -- cfg.col = cfg.col + xoff
-  -- cfg.row = cfg.row + yoff
-
   return cfg
 end
 
 M.setup = function()
   M.bufnr = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("undolevels", -1, {  buf = M.bufnr })
+  vim.api.nvim_set_option_value("undolevels", -1, { buf = M.bufnr })
 
   M.ns = vim.api.nvim_create_namespace('corn')
 end
@@ -144,52 +135,66 @@ local assemble_lines = function(items, config)
   return item_lines, hl_segments, longest_line_len
 end
 
-M.render = function(items)
-  -- sorting
-  if config.opts.sort_method == 'column' then
-    table.sort(items, function(a, b) return a.col < b.col end)
-  elseif config.opts.sort_method == 'column_reverse' then
-    table.sort(items, function(a, b) return a.col > b.col end)
-  elseif config.opts.sort_method == 'severity' then
-    -- NOTE not needed since items already come ordered this way
-    -- table.sort(items, function(a, b) return a.severity < b.severity end)
-  elseif config.opts.sort_method == 'severity_reverse' then
-    table.sort(items, function(a, b) return a.severity > b.severity end)
-  elseif config.opts.sort_method == 'line_number' then
-    table.sort(items, function(a, b) return a.lnum < b.lnum end)
-  elseif config.opts.sort_method == 'line_number_reverse' then
-    table.sort(items, function(a, b) return a.lnum > b.lnum end)
+M.render_from_cache = function()
+  return M.render(M.cache)
+end
+
+M.filter_diags = function(diags)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local line = cursor_pos[1] - 1 -- Subtract 1 to convert to 0-based indexing
+  local col = cursor_pos[2]
+
+  local current_pos_diags = {}
+  for _, diag in ipairs(diags) do
+    local should_insert = false
+    local in_line = diag.lnum <= line and line <= (diag.end_lnum or diag.lnum)
+    if config.opts.scope == 'line' then
+      should_insert = in_line
+    elseif config.opts.scope == 'cursor' then
+      if diag.end_col and diag.end_lnum then
+        if diag.lnum == diag.end_lnum then
+          should_insert = diag.lnum == line and diag.col <= col and col <= diag.end_col
+        else
+          should_insert = ((diag.lnum == line and diag.col <= col) -- On the first line, should be after the col
+            or (diag.lnum < line and line < diag.end_lnum)         -- Between lines, we always show it
+            or (diag.end_lnum == line and col <= diag.end_col)     -- On the last line, only before the end
+          )
+        end
+      else
+        should_insert = diag.lnum == line and (diag.col <= col and (diag.end_col or diag.col) >= col)
+      end
+    end
+
+    if should_insert then
+      table.insert(current_pos_diags, diag)
+    end
   end
 
+  return current_pos_diags
+end
+
+M.render = function(items)
+  -- sorting
   local xoff = 0
   local yoff = 0
   local position = "NE"
 
+  local current_buf = vim.api.nvim_get_current_buf()
+  local local_diags = items[current_buf] or {}
+  items = M.filter_diags(local_diags)
+
   -- calculate visibility
-  if
-  -- user didnt toggle off
-      M.state
-      -- there are items
-      and #items > 0
-      -- can fit in the width and height of the parent window
-      -- and vim.api.nvim_win_get_width(0) >= longest_line_len + 2 -- because of the borders
-      -- vim mode isnt blacklisted
-      and vim.tbl_contains(config.opts.blacklisted_modes, vim.api.nvim_get_mode().mode) == false
+  if not (
+      -- user didnt toggle off
+        M.state
+        -- there are items
+        and #items > 0
+        -- can fit in the width and height of the parent window
+        -- and vim.api.nvim_win_get_width(0) >= longest_line_len + 2 -- because of the borders
+        -- vim mode isnt blacklisted
+        and vim.tbl_contains(config.opts.blacklisted_modes, vim.api.nvim_get_mode().mode) == false
+      )
   then
-    M.should_render = true
-  else
-    M.should_render = false
-  end
-
-  -- set position and offsets
-  -- based on relative mouse position
-  -- rline, rcol = utils.get_cursor_relative_pos()
-  -- if rline < #item_lines +2 then -- +2 because of the borders
-  --   position = "NE-CB"
-  -- end
-
-  -- either close_win, open_win or win_set_config
-  if not M.should_render then
     if M.win then
       vim.api.nvim_win_hide(M.win)
       M.win = nil
@@ -201,13 +206,10 @@ M.render = function(items)
 
   if not M.win then
     M.win = vim.api.nvim_open_win(M.bufnr, false, M.make_win_cfg(longest_line_len, #item_lines, position, xoff, yoff))
-    -- vim.api.nvim_win_set_option(M.win, 'winblend', 50)
     vim.api.nvim_buf_set_lines(M.bufnr, 0, -1, false, item_lines)
-    -- vim.api.nvim_win_set_hl_ns(M.win, M.ns)
   elseif M.win then
     vim.api.nvim_win_set_config(M.win, M.make_win_cfg(longest_line_len, #item_lines, position, xoff, yoff))
     vim.api.nvim_buf_set_lines(M.bufnr, 0, -1, false, item_lines)
-    -- vim.api.nvim_win_set_hl_ns(M.win, M.ns)
   end
 
   -- apply highlights

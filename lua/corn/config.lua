@@ -22,6 +22,10 @@ M.default_opts = {
   ---@type DiagnosticSeverity[]
   blacklisted_severities = {},
 
+  render_events = { "DiagnosticChanged", "CursorMoved", "WinResized" },
+
+  update_events = { "DiagnosticChanged", "BufReadPost" },
+
   ---@type { error: string, warn: string, hint: string, info: string, trunc: string }
   highlights = {
     error = "DiagnosticFloatingError",
