@@ -105,8 +105,8 @@ local assemble_lines = function(items, config)
       append_to_line(message_line, utils.diag_severity_to_hl_group(item.severity))
       -- extra info on the last line only
       if j == #message_lines then
-        append_to_line(item.code .. '', 'Folded')
-        append_to_line(item.source, 'Comment')
+        append_to_line((item.code or '') .. '', 'Folded')
+        append_to_line((item.source or ''), 'Comment')
         if config.opts.scope == 'line' then
           append_to_line(':' .. item.col, 'Comment')
         elseif config.opts.scope == 'file' then
