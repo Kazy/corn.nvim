@@ -174,6 +174,11 @@ M.filter_diags = function(diags)
 end
 
 M.render = function(items)
+  if M.win and not vim.api.nvim_win_is_valid(M.win) then
+    M.win = nil
+    return
+  end
+
   -- sorting
   local xoff = 0
   local yoff = 0
